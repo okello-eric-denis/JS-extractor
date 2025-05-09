@@ -1,103 +1,147 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
+import ThemeSwitcher from '@/components/ThemeSwitcher';
+
+// Dynamically import the PDF viewer component to avoid SSR issues
+const PdfViewer = dynamic(() => import('@/components/PdfViewer'), {
+  ssr: false,
+  loading: () => <div className="loading">Loading PDF viewer...</div>,
+});
+import TextExtractor from '@/components/TextExtractor';
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [file, setFile] = useState(null);
+  const [fileUrl, setFileUrl] = useState(null);
+  const [extractedText, setExtractedText] = useState('');
+  const [selectedTextPdf, setSelectedTextPdf] = useState({ text: '', position: null });
+  const [selectedTextExtracted, setSelectedTextExtracted] = useState('');
+  const [pageTexts, setPageTexts] = useState([]);
+  const [loadingText, setLoadingText] = useState(false);
+  
+  const pdfViewerRef = useRef(null);
+  const textExtractorRef = useRef(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  useEffect(() => {
+    // Clean up object URL on unmount
+    return () => {
+      if (fileUrl) {
+        URL.revokeObjectURL(fileUrl);
+      }
+    };
+  }, [fileUrl]);
+
+  const handleFileChange = async (e) => {
+    const selectedFile = e.target.files[0];
+    if (selectedFile && selectedFile.type === 'application/pdf') {
+      // Create object URL for the PDF viewer
+      if (fileUrl) {
+        URL.revokeObjectURL(fileUrl);
+      }
+      const newFileUrl = URL.createObjectURL(selectedFile);
+      setFile(selectedFile);
+      setFileUrl(newFileUrl);
+      
+      // Reset states
+      setExtractedText('');
+      setSelectedTextPdf({ text: '', position: null });
+      setSelectedTextExtracted('');
+      setPageTexts([]);
+      
+      // Extract text from PDF
+      setLoadingText(true);
+      try {
+        const formData = new FormData();
+        formData.append('pdf', selectedFile);
+        
+        const response = await fetch('/api/extract-text', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setExtractedText(data.text);
+          setPageTexts(data.pageTexts || []);
+        } else {
+          console.error('Failed to extract text');
+          setExtractedText('Error: Failed to extract text from PDF');
+        }
+      } catch (error) {
+        console.error('Error extracting text:', error);
+        setExtractedText('Error: Failed to extract text from PDF');
+      } finally {
+        setLoadingText(false);
+      }
+    } else {
+      alert('Please select a valid PDF file.');
+    }
+  };
+
+  const handlePdfTextSelection = (text, position) => {
+    setSelectedTextPdf({ text, position });
+    // Find the text in the extracted text and highlight it
+    if (textExtractorRef.current && text) {
+      textExtractorRef.current.highlightText(text);
+    }
+  };
+
+  const handleExtractedTextSelection = (text) => {
+    setSelectedTextExtracted(text);
+    // Find the text in the PDF and highlight it
+    if (pdfViewerRef.current && text) {
+      pdfViewerRef.current.highlightText(text);
+    }
+  };
+
+  return (
+    <div className="container">
+      <main className="main">
+        <header className="header">
+          <h1 className="title">Extractor</h1>
+          <ThemeSwitcher />
+        </header>
+        
+        <div className="upload-section">
+          <input
+            type="file"
+            accept="application/pdf"
+            onChange={handleFileChange}
+            className="file-input"
+            id="pdf-upload"
+          />
+          <label htmlFor="pdf-upload" className="file-label">
+            Choose PDF File
+          </label>
         </div>
+
+        {fileUrl && (
+          <div className="content-container">
+            <div className="column">
+              <h2>PDF Viewer</h2>
+              <PdfViewer 
+                fileUrl={fileUrl} 
+                onTextSelection={handlePdfTextSelection}
+                ref={pdfViewerRef}
+                pageTexts={pageTexts} 
+              />
+            </div>
+            <div className="column">
+              <h2>Extracted Text</h2>
+              {loadingText ? (
+                <div className="loading">Extracting text...</div>
+              ) : (
+                <TextExtractor 
+                  text={extractedText} 
+                  onTextSelection={handleExtractedTextSelection}
+                  ref={textExtractorRef}
+                />
+              )}
+            </div>
+          </div>
+        )}
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }

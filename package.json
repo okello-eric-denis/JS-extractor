@@ -8,11 +8,14 @@
     "start": "next start",
     "lint": "next lint"
   },
-  "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "next": "15.3.1"
-  },
+ "dependencies": {
+  "next": "^14.0.0",
+  "react": "^18.2.0",
+  "react-dom": "^18.2.0",
+  "pdfjs-dist": "^3.11.174",
+  "react-pdf": "^7.5.1",
+  "formidable": "^3.5.1"
+},
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "tailwindcss": "^4"
